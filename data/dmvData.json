@@ -1,0 +1,93 @@
+[
+  {
+    "vin": "1HGCM82633A912457",
+    "plate": "KZT-4821",
+    "make": "Honda",
+    "model": "Civic",
+    "year": 2019,
+    "owner": {
+      "name": "Maria Thompson",
+      "license": "T3849217",
+      "address": "742 Oak Ridge Dr, Springfield, IL 62704"
+    },
+    "registration": {
+      "status": "Active",
+      "expires": "2026-11-22",
+      "last_renewed": "2025-11-18",
+      "fees_paid": 101.0
+    }
+  },
+  {
+    "vin": "2FTRX18W1XCA57329",
+    "plate": "BDR-9035",
+    "make": "Ford",
+    "model": "F-150",
+    "year": 2015,
+    "owner": {
+      "name": "Kevin Marshall",
+      "license": "M5821043",
+      "address": "19 West Elm St, Chesterfield, MO 63005"
+    },
+    "registration": {
+      "status": "Expired",
+      "expires": "2025-04-09",
+      "last_renewed": "2024-04-05",
+      "fees_paid": 112.75
+    }
+  },
+  {
+    "vin": "3N1AB7AP4HY264883",
+    "plate": "JQF-2279",
+    "make": "Nissan",
+    "model": "Sentra",
+    "year": 2020,
+    "owner": {
+      "name": "Alicia Gomez",
+      "license": "G7192048",
+      "address": "508 Lakeview Ct, Ballwin, MO 63011"
+    },
+    "registration": {
+      "status": "Active",
+      "expires": "2027-02-14",
+      "last_renewed": "2026-02-10",
+      "fees_paid": 98.5
+    }
+  },
+  {
+    "vin": "5YJ3E1EA7JF128640",
+    "plate": "RML-6732",
+    "make": "Tesla",
+    "model": "Model 3",
+    "year": 2018,
+    "owner": {
+      "name": "Daniel Price",
+      "license": "P1938475",
+      "address": "2210 Briarwood Ln, Creve Coeur, MO 63141"
+    },
+    "registration": {
+      "status": "Suspended",
+      "expires": "2026-06-01",
+      "last_renewed": "2025-05-28",
+      "fees_paid": 132.0,
+      "suspension_reason": "Insurance lapse reported on 2025-12-03"
+    }
+  },
+  {
+    "vin": "1FTBW2CM4MKA91234",
+    "plate": "HSD-8140",
+    "make": "Ford",
+    "model": "Transit 250",
+    "year": 2021,
+    "owner": {
+      "name": "Rebecca Lin",
+      "license": "L4029183",
+      "address": "88 Willow Bend Rd, St. Charles, MO 63043"
+    },
+    "registration": {
+      "status": "Active",
+      "expires": "2027-09-03",
+      "last_renewed": "2026-08-29",
+      "fees_paid": 146.25
+    }
+  }
+]

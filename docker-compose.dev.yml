@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  frontend:
+    build:
+      context: ./blog
+      dockerfile: Dockerfile
+    container_name: blog-frontend-dev
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      API_URL: http://localhost:8000
+    volumes:
+      - ./blog:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    command: ["npm", "run", "dev"]
+    networks:
+      - blog-dev
+
+  backend:
+    build:
+      context: ./blog-backend
+      dockerfile: Dockerfile
+    container_name: blog-backend-dev
+    environment:
+      NODE_ENV: development
+      PORT: 8000
+      USE_HTTPS: "false"
+      CHROMA_URL: "http://chroma:8000"
+      OLLAMA_HOST: "http://ollama:11434"
+      OLLAMA_MODEL: "llama3.1:8b"
+      EMBEDDING_MODEL: "nomic-embed-text:v1.5"
+    volumes:
+      - ./blog-backend:/app
+      - /app/node_modules
+    ports:
+      - "8000:8000"
+    command: ["npm", "run", "dev"]
+    networks:
+      - blog-dev
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: blog-chroma-dev
+    volumes:
+      - chroma-dev-data:/chroma
+    networks:
+      - blog-dev
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: blog-ollama-dev
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-dev-data:/root/.ollama
+    networks:
+      - blog-dev
+
+networks:
+  blog-dev:
+    driver: bridge
+
+volumes:
+  chroma-dev-data:
+  ollama-dev-data:
