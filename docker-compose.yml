@@ -19,11 +19,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 8000
-      USE_HTTPS: "false"
-      CHROMA_URL: "http://chroma:8000"
-      OLLAMA_HOST: "http://ollama:11434"
+      USE_HTTPS: "true"
       OLLAMA_MODEL: "llama3.1:8b"
       EMBEDDING_MODEL: "nomic-embed-text:v1.5"
+    env_file:
+      - ./backend.env
     depends_on:
       - chroma
       - ollama
@@ -77,8 +77,6 @@ services:
       - ollama
     environment:
       NODE_ENV: production
-      CHROMA_URL: "http://chroma:8000"
-      OLLAMA_HOST: "http://ollama:11434"
     command: ["npm", "run", "prod_ingest"]
     networks:
       - blog-net

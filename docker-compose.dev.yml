@@ -27,11 +27,11 @@ services:
     environment:
       NODE_ENV: development
       PORT: 8000
-      USE_HTTPS: "false"
-      CHROMA_URL: "http://chroma:8000"
-      OLLAMA_HOST: "http://ollama:11434"
+      USE_HTTPS: "true"
       OLLAMA_MODEL: "llama3.1:8b"
       EMBEDDING_MODEL: "nomic-embed-text:v1.5"
+    env_file:
+      - ./backend.env
     volumes:
       - ./blog-backend:/app
       - /app/node_modules
