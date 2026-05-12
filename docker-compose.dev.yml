@@ -3,27 +3,27 @@ version: "3.9"
 services:
   frontend:
     build:
-      context: ./blog
+      context: ./lab-app
       dockerfile: Dockerfile
-    container_name: blog-frontend-dev
+    container_name: lab-app-frontend-dev
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://localhost:8000
       API_URL: http://localhost:8000
     volumes:
-      - ./blog:/app
+      - ./lab-app:/app
       - /app/node_modules
     ports:
       - "3000:3000"
     command: ["npm", "run", "dev"]
     networks:
-      - blog-dev
+      - lab-app-dev
 
   backend:
     build:
-      context: ./blog-backend
+      context: ./lab-app-backend
       dockerfile: Dockerfile
-    container_name: blog-backend-dev
+    container_name: lab-app-backend-dev
     environment:
       NODE_ENV: development
       PORT: 8000
@@ -33,34 +33,34 @@ services:
     env_file:
       - ./backend.env
     volumes:
-      - ./blog-backend:/app
+      - ./lab-app-backend:/app
       - /app/node_modules
     ports:
       - "8000:8000"
     command: ["npm", "run", "dev"]
     networks:
-      - blog-dev
+      - lab-app-dev
 
   chroma:
     image: chromadb/chroma:latest
-    container_name: blog-chroma-dev
+    container_name: lab-app-chroma-dev
     volumes:
       - chroma-dev-data:/chroma
     networks:
-      - blog-dev
+      - lab-app-dev
 
   ollama:
     image: ollama/ollama:latest
-    container_name: blog-ollama-dev
+    container_name: lab-app-ollama-dev
     ports:
       - "11434:11434"
     volumes:
       - ollama-dev-data:/root/.ollama
     networks:
-      - blog-dev
+      - lab-app-dev
 
 networks:
-  blog-dev:
+  lab-app-dev:
     driver: bridge
 
 volumes:

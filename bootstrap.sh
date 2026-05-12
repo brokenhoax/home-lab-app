@@ -7,8 +7,8 @@ sudo apt install -y docker.io docker-compose-plugin
 sudo usermod -aG docker "$USER" || true
 
 echo "Preparing directories..."
-mkdir -p ~/home-lab-blog/infra/nginx
-cd ~/home-lab-blog
+mkdir -p ~/lab-app/infra/nginx
+cd ~/lab-app
 
 echo "Creating docker-compose.yml..."
 cat > docker-compose.yml << 'EOF'
@@ -16,8 +16,8 @@ version: "3.9"
 
 services:
   frontend:
-    image: brokenhoax/blog-frontend:latest
-    container_name: blog-frontend
+    image: brokenhoax/lab-app-frontend:latest
+    container_name: lab-app-frontend
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: https://krauscloud.com
@@ -25,11 +25,11 @@ services:
     depends_on:
       - backend
     networks:
-      - blog-net
+      - lab-app-net
 
   backend:
-    image: brokenhoax/blog-backend:latest
-    container_name: blog-backend
+    image: brokenhoax/lab-app-backend:latest
+    container_name: lab-app-backend
     environment:
       NODE_ENV: production
       PORT: 8000
@@ -42,25 +42,25 @@ services:
       - chroma
       - ollama
     networks:
-      - blog-net
+      - lab-app-net
 
   chroma:
     image: chromadb/chroma:latest
-    container_name: blog-chroma
+    container_name: lab-app-chroma
     volumes:
       - chroma-data:/chroma
     networks:
-      - blog-net
+      - lab-app-net
 
   ollama:
     image: ollama/ollama:latest
-    container_name: blog-ollama
+    container_name: lab-app-ollama
     ports:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     networks:
-      - blog-net
+      - lab-app-net
     command: >
       /bin/sh -c "
         ollama serve &
@@ -72,7 +72,7 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: blog-nginx
+    container_name: lab-app-nginx
     ports:
       - "80:80"
     volumes:
@@ -81,11 +81,11 @@ services:
       - frontend
       - backend
     networks:
-      - blog-net
+      - lab-app-net
 
   ingest:
-    image: brokenhoax/blog-backend:latest
-    container_name: blog-ingest
+    image: brokenhoax/lab-app-backend:latest
+    container_name: lab-app-ingest
     depends_on:
       - chroma
       - ollama
@@ -95,11 +95,11 @@ services:
       OLLAMA_HOST: "http://ollama:11434"
     command: ["npm", "run", "prod_ingest"]
     networks:
-      - blog-net
+      - lab-app-net
     restart: "no"
 
 networks:
-  blog-net:
+  lab-app-net:
     driver: bridge
 
 volumes:
