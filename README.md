@@ -1,28 +1,40 @@
-# KrausCloud Blog – Home Lab Deployment
+# Home Lab App — Deployment Guide
 
-This repository contains the Docker-only deployment for the KrausCloud Blog + Chatbot (RAG over DMV dataset).
+This project runs:
 
-## Components
+- Frontend (Next.js)
+- Backend (Node.js)
+- ChromaDB (vector database)
+- NGINX reverse proxy
+- Ingestion job
 
-- **frontend** – Next.js UI
-- **backend** – Express API + RAG ingestion + embeddings
-- **chroma** – Vector database
-- **ollama** – LLM + embeddings
-- **nginx** – Reverse proxy
-- **ingest** – One-shot ingestion job
+**Ollama does NOT run in Docker.**  
+It runs natively on the host because the Docker image is not compatible with all CPUs.
 
-## Requirements
+---
 
-- Ubuntu Server 22.04+
-- Docker
-- Docker Compose v2
-
-## Quick Start
+## 1. Install Ollama on the host
 
 ```bash
-git clone https://github.com/yourname/home-lab-blog.git
-cd home-lab-blog
-
-chmod +x bootstrap.sh
-./bootstrap.sh
+curl -fsSL https://ollama.com/install.sh | sh
 ```
+
+## 2. Pull the Ollama models
+
+ollama pull llama3.1:8b
+ollama pull nomic-embed-text:v1.5
+ollama pull llama-guard3:8b
+
+## 3. Verify Your Work
+ollama list
+ollama ps
+
+## 4. Create an Ollama config file (if it doesn't exist)
+sudo mkdir -p /etc/ollama
+sudo nano /etc/ollama/config.yaml
+
+## 5. Add the following text to it:
+listen: 0.0.0.0:11434
+
+## 6. Restart Ollama
+sudo systemctl restart ollama
