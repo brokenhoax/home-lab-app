@@ -42,10 +42,11 @@ services:
   ollama:
     image: ollama/ollama:latest
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags | grep llama3.1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags | grep -q nomic-embed-text"]
       interval: 5s
-      timeout: 3s
-      retries: 20
+      timeout: 5s
+      retries: 60
+      start_period: 10s
     container_name: lab-app-ollama
     ports:
       - "11434:11434"
@@ -53,14 +54,7 @@ services:
       - ollama-data:/root/.ollama
     networks:
       - lab-app-net
-    command: >
-      /bin/sh -c "
-        ollama serve &
-        sleep 5 &&
-        ollama pull llama3.1:8b &&
-        ollama pull nomic-embed-text:v1.5 &&
-        wait
-      "
+    command: ["ollama", "serve"]
 
   nginx:
     image: nginx:1.27-alpine
