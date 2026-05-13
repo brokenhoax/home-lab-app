@@ -1,9 +1,24 @@
 #!/usr/bin/env bash
 set -e
 
-echo "Installing Docker..."
-sudo apt update
-sudo apt install -y docker.io docker-compose-plugin
+echo "Installing Docker (RHEL)..."
+
+# Remove old versions if present
+sudo yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine || true
+
+# Install required packages
+sudo yum install -y yum-utils device-mapper-persistent-data lvm2
+
+# Add Docker CE repo
+sudo yum-config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+
+# Install Docker + Compose plugin
+sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Enable + start Docker
+sudo systemctl enable --now docker
+
+# Add user to docker group
 sudo usermod -aG docker "$USER" || true
 
 echo "Preparing directories..."
@@ -21,7 +36,6 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: https://krauscloud.com
-      API_URL: https://krauscloud.com
     depends_on:
       - backend
     networks:
@@ -93,7 +107,7 @@ services:
       NODE_ENV: production
       CHROMA_URL: "http://chroma:8000"
       OLLAMA_HOST: "http://ollama:11434"
-    command: ["npm", "run", "prod_ingest"]
+    command: ["npm", "run", "docker_ingest"]
     networks:
       - lab-app-net
     restart: "no"
@@ -105,7 +119,6 @@ networks:
 volumes:
   chroma-data:
   ollama-data:
-
 EOF
 
 echo "Creating nginx.conf..."
@@ -142,7 +155,6 @@ http {
         }
     }
 }
-
 EOF
 
 echo "Starting containers..."
