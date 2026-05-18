@@ -23,6 +23,8 @@ services:
       OLLAMA_HOST: "http://host.docker.internal:11434"
       OLLAMA_MODEL: "llama3.1:8b"
       EMBEDDING_MODEL: "nomic-embed-text:v1.5"
+    networks:
+      - lab-app-net
     volumes:
       - chroma-data:/app/dist/data
     depends_on:
