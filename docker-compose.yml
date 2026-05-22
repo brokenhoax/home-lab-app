@@ -9,6 +9,8 @@ services:
       - backend
     networks:
       - lab-app-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   backend:
     image: brokenhoax/lab-app-backend:latest
@@ -29,6 +31,8 @@ services:
       - chroma-data:/app/dist/data
     depends_on:
       - chroma
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   chroma:
     image: chromadb/chroma:latest
@@ -54,14 +58,23 @@ services:
       - lab-app-net
 
   ingest:
+    profiles: ["ingest"]
     image: brokenhoax/lab-app-backend:latest
-    container_name: lab-app-ingest
     networks:
       - lab-app-net
     environment:
       NODE_ENV: production
       CHROMA_URL: "http://chroma:8000"
       OLLAMA_HOST: "http://host.docker.internal:11434"
+      OLLAMA_MODEL: "llama3.1:8b"
+      EMBEDDING_MODEL: "nomic-embed-text:v1.5"
+    volumes:
+      - ./data:/app/data:ro
+    command: ["node", "dist/ingest.js", "--reset"]
+    depends_on:
+      - chroma
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 networks:
   lab-app-net:
