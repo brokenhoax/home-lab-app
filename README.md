@@ -39,6 +39,8 @@ Logs: `bootstrap.log` in the repo root.
 
 Public images on Docker Hub (`brokenhoax/lab-app-*`) only control **who can pull** images. Each machine still needs Docker installed and permission to run it locally.
 
+**Publish images** (from a machine with Docker + `docker login`): `./scripts/publish-images.sh` — builds from sibling `blog` and `blog-backend` repos by default.
+
 ---
 
 ## Ollama models (all platforms)
