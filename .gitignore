@@ -1,2 +1,5 @@
 # Environment Variables
 backend.env
+
+# Bootstrap logs
+bootstrap.log

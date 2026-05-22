@@ -1,136 +1,231 @@
 #!/usr/bin/env bash
-set -e
+# Bootstrap home-lab-app: Docker (if needed), compose stack, ingestion.
+# Run from a terminal:  cd ~/Documents/dev/home-lab-app && ./bootstrap.sh
+# Logs are written to bootstrap.log in this directory.
 
-echo "=== Installing Docker (RHEL/CentOS) ==="
+set -euo pipefail
 
-sudo yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine || true
-sudo yum install -y yum-utils device-mapper-persistent-data lvm2
-sudo yum-config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
-sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-sudo systemctl enable --now docker
-sudo usermod -aG docker "$USER" || true
+LOG_FILE="${SCRIPT_DIR}/bootstrap.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "=== Preparing project directories ==="
-mkdir -p ~/Documents/dev/home-lab-app/infra/nginx
-cd ~/Documents/dev/home-lab-app
-
-echo "=== Writing docker-compose.yml ==="
-cat > docker-compose.yml << 'EOF'
-services:
-  frontend:
-    image: brokenhoax/lab-app-frontend:latest
-    container_name: lab-app-frontend
-    environment:
-      NODE_ENV: production
-      NEXT_PUBLIC_API_URL: "http://localhost"
-    depends_on:
-      - backend
-    networks:
-      - lab-app-net
-
-  backend:
-    image: brokenhoax/lab-app-backend:latest
-    container_name: lab-app-backend
-    ports:
-      - "8000:8000"
-    environment:
-      NODE_ENV: production
-      PORT: 8000
-      USE_HTTPS: "false"
-      CHROMA_URL: "http://chroma:8000"
-      OLLAMA_HOST: "http://host.docker.internal:11434"
-      OLLAMA_MODEL: "llama3.1:8b"
-      EMBEDDING_MODEL: "nomic-embed-text:v1.5"
-    networks:
-      - lab-app-net
-    volumes:
-      - chroma-data:/app/dist/data
-    depends_on:
-      - chroma
-
-  chroma:
-    image: chromadb/chroma:latest
-    container_name: lab-app-chroma
-    ports:
-      - "9001:8000"
-    networks:
-      - lab-app-net
-    volumes:
-      - chroma-data:/chroma
-
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: lab-app-nginx
-    ports:
-      - "80:80"
-    volumes:
-      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - lab-app-net
-
-  ingest:
-    image: brokenhoax/lab-app-backend:latest
-    container_name: lab-app-ingest
-    networks:
-      - lab-app-net
-    environment:
-      NODE_ENV: production
-      CHROMA_URL: "http://chroma:8000"
-      OLLAMA_HOST: "http://host.docker.internal:11434"
-
-networks:
-  lab-app-net:
-    driver: bridge
-
-volumes:
-  chroma-data:
-EOF
-
-echo "=== Writing nginx.conf ==="
-cat > infra/nginx/nginx.conf << 'EOF'
-events {}
-
-http {
-    upstream frontend {
-        server frontend:3000;
-    }
-
-    upstream backend {
-        server backend:8000;
-    }
-
-    server {
-        listen 80;
-        server_name _;
-
-        location / {
-            proxy_pass http://frontend/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-
-        location /api/ {
-            proxy_pass http://backend/api/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-    }
+on_error() {
+  local line=$1 code=$?
+  echo ""
+  echo "=== Bootstrap FAILED (exit ${code}) at line ${line} ==="
+  echo "Full log: ${LOG_FILE}"
+  if [[ -t 0 && -t 1 ]]; then
+    read -r -p "Press Enter to close this window..."
+  fi
+  exit "${code}"
 }
-EOF
+trap 'on_error ${LINENO}' ERR
 
-echo "=== Starting containers ==="
-docker compose pull
-docker compose up -d
+echo "=== Home Lab App bootstrap ==="
+echo "Started: $(date)"
+echo "Working directory: ${SCRIPT_DIR}"
 
-echo "=== Running ingestion (with wait) ==="
-docker compose run --rm ingest || true
+# --- Docker access (re-exec under docker group if membership is new this session) ---
+docker_ok() {
+  docker info &>/dev/null
+}
 
-echo "=== Deployment complete. Visit: http://<server-ip>/ ==="
+compose() {
+  docker compose "$@"
+}
+
+ensure_docker_access() {
+  if docker_ok; then
+    return 0
+  fi
+
+  # sg reads /etc/group directly — works for ANY username right after usermod,
+  # even before log-out/log-in (no hardcoded usernames).
+  if sg docker -c "docker info" &>/dev/null 2>&1; then
+    echo "Re-running with docker group privileges (user: ${USER})..."
+    exec sg docker -c "cd $(printf '%q' "$SCRIPT_DIR") && exec $(printf '%q' "${SCRIPT_DIR}/$(basename "$0")")"
+  fi
+
+  if sudo -n docker info &>/dev/null 2>&1; then
+    echo "Using sudo for Docker commands."
+    compose() { sudo docker compose "$@"; }
+    return 0
+  fi
+
+  if command -v docker &>/dev/null && sudo docker info &>/dev/null; then
+    echo "Using sudo for Docker commands."
+    compose() { sudo docker compose "$@"; }
+    return 0
+  fi
+
+  echo "ERROR: Cannot talk to the Docker daemon."
+  echo "  - If Docker is installed, run:  sudo usermod -aG docker ${USER}"
+  echo "  - Then log out and back in (or: newgrp docker), and re-run this script."
+  exit 1
+}
+
+install_docker_if_missing() {
+  if command -v docker &>/dev/null; then
+    echo "=== Docker already installed ($(docker --version 2>/dev/null || echo unknown)) ==="
+    if ! systemctl is-active --quiet docker 2>/dev/null; then
+      echo "Starting Docker service (sudo required)..."
+      sudo systemctl enable --now docker
+    fi
+    if ! id -nG "${USER}" | grep -qw docker; then
+      echo "Adding ${USER} to the docker group (sudo required)..."
+      sudo usermod -aG docker "${USER}" || true
+      echo "You may need to log out and back in for group membership to apply."
+    fi
+    return 0
+  fi
+
+  echo "=== Installing Docker (RHEL/CentOS) — sudo required ==="
+  sudo yum remove -y docker docker-client docker-client-latest docker-common \
+    docker-latest docker-latest-logrotate docker-logrotate docker-engine 2>/dev/null || true
+  sudo yum install -y yum-utils device-mapper-persistent-data lvm2
+  sudo yum-config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+  sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  sudo systemctl enable --now docker
+  sudo usermod -aG docker "${USER}" || true
+}
+
+install_docker_if_missing
+ensure_docker_access
+
+check_ollama_for_docker() {
+  local bridge_ip="${1:-172.17.0.1}"
+  curl -sf --max-time 3 "http://${bridge_ip}:11434/api/tags" &>/dev/null
+}
+
+docker_bridge_ip() {
+  if ip -4 addr show docker0 &>/dev/null 2>&1; then
+    ip -4 addr show docker0 | awk '/inet / {print $2}' | cut -d/ -f1 | head -1
+    return 0
+  fi
+  echo "172.17.0.1"
+}
+
+ollama_has_model() {
+  local name="$1"
+  command -v ollama &>/dev/null || return 1
+  ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -q "^${name}"
+}
+
+ensure_ollama_models() {
+  local modelfile="${SCRIPT_DIR}/ollama/Modelfile"
+  local -a base_models=( "llama3.1:8b" "nomic-embed-text:v1.5" "llama-guard3:8b" )
+
+  if ! command -v ollama &>/dev/null; then
+    echo "WARNING: ollama CLI not found; skipping model pull/create."
+    return 0
+  fi
+  if ! curl -sf --max-time 3 http://127.0.0.1:11434/api/tags &>/dev/null; then
+    return 0
+  fi
+  if [[ ! -f "${modelfile}" ]]; then
+    echo "WARNING: missing ${modelfile}; cannot create kraus-cloud-llama."
+    return 0
+  fi
+
+  echo "=== Ensuring Ollama models (chat uses kraus-cloud-llama) ==="
+  for model in "${base_models[@]}"; do
+    if ollama_has_model "${model}"; then
+      echo "  ${model} — present"
+    else
+      echo "  Pulling ${model}..."
+      ollama pull "${model}"
+    fi
+  done
+
+  if ollama_has_model "kraus-cloud-llama"; then
+    echo "  kraus-cloud-llama — present"
+  else
+    echo "  Creating kraus-cloud-llama from ollama/Modelfile..."
+    ollama create kraus-cloud-llama -f "${modelfile}"
+    echo "  kraus-cloud-llama — created"
+  fi
+}
+
+echo "=== Checking Ollama on host (required for embeddings / chat) ==="
+if ! curl -sf --max-time 3 http://127.0.0.1:11434/api/tags &>/dev/null; then
+  echo "WARNING: Ollama is not reachable at http://127.0.0.1:11434"
+  echo "  Install: curl -fsSL https://ollama.com/install.sh | sh"
+  echo "  Models:  ollama pull llama3.1:8b && ollama pull nomic-embed-text:v1.5"
+else
+  echo "Ollama is reachable at http://127.0.0.1:11434"
+  BRIDGE_IP="$(docker_bridge_ip)"
+  if ! check_ollama_for_docker "${BRIDGE_IP}"; then
+    echo "WARNING: Ollama is NOT reachable from Docker at http://${BRIDGE_IP}:11434"
+    echo "  (Backend uses host.docker.internal → this address; chat/ingest will fail.)"
+    echo "  On Linux, /etc/ollama/config.yaml does not set the listen address."
+    echo "  Fix:  sudo ${SCRIPT_DIR}/scripts/configure-ollama-for-docker.sh"
+    echo "  Or:   sudo systemctl edit ollama.service  →  Environment=\"OLLAMA_HOST=0.0.0.0:11434\""
+  else
+    echo "Ollama is reachable from Docker at http://${BRIDGE_IP}:11434"
+  fi
+  ensure_ollama_models
+fi
+
+echo "=== Ensuring config files exist ==="
+mkdir -p infra/nginx
+if [[ ! -f infra/nginx/nginx.conf ]]; then
+  echo "ERROR: missing infra/nginx/nginx.conf — restore from the repo and re-run."
+  exit 1
+fi
+if [[ ! -f docker-compose.yml ]]; then
+  echo "ERROR: missing docker-compose.yml — restore from the repo and re-run."
+  exit 1
+fi
+if [[ ! -f data/dmvData.json ]]; then
+  echo "WARNING: missing data/dmvData.json — ingestion may fail."
+fi
+
+echo "=== Pulling images ==="
+compose pull
+
+echo "=== Starting stack ==="
+compose up -d
+
+BRIDGE_IP="$(docker_bridge_ip)"
+if curl -sf --max-time 3 http://127.0.0.1:11434/api/tags &>/dev/null \
+  && ! check_ollama_for_docker "${BRIDGE_IP}"; then
+  echo ""
+  echo "ERROR: Ollama is up on localhost but not on ${BRIDGE_IP} (Docker cannot reach it)."
+  echo "  Chat and ingestion will fail until you run:"
+  echo "    sudo ${SCRIPT_DIR}/scripts/configure-ollama-for-docker.sh"
+  echo ""
+fi
+
+echo "=== Waiting for Chroma ==="
+for i in {1..30}; do
+  if curl -sf --max-time 2 http://127.0.0.1:9001/api/v1/heartbeat &>/dev/null \
+    || curl -sf --max-time 2 http://127.0.0.1:9001/api/v2/heartbeat &>/dev/null; then
+    echo "Chroma is up."
+    break
+  fi
+  if [[ "$i" -eq 30 ]]; then
+    echo "WARNING: Chroma heartbeat not confirmed on :9001; continuing anyway."
+  fi
+  sleep 2
+done
+
+echo "=== Running ingestion ==="
+if compose --profile ingest run --rm ingest; then
+  echo "Ingestion finished."
+else
+  echo "WARNING: Ingestion failed (stack may still run; check: docker compose logs)"
+fi
+
+echo ""
+echo "=== Deployment complete ==="
+echo "  App (via nginx):  http://localhost/"
+echo "  Backend direct:   http://localhost:8000"
+echo "  Chroma UI port:   http://localhost:9001"
+echo "  Log file:         ${LOG_FILE}"
+echo ""
+
+if [[ -t 0 && -t 1 ]]; then
+  read -r -p "Press Enter to close this window..."
+fi
