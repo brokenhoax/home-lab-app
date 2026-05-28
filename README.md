@@ -57,6 +57,43 @@ Logs: `bootstrap.log` in the repo root.
 
 ---
 
+## Configuration (`backend.env`)
+
+For the Docker stack deployed from this repo, **`backend.env` is the one file you edit** for secrets and environment-specific overrides. Bootstrap creates it from `backend.env.example` on first run if it is missing.
+
+```bash
+cp backend.env.example backend.env   # if you create it manually
+# edit backend.env — then restart services:
+docker compose up -d
+```
+
+| Variable | Required? | Typical home-lab value | When to change |
+|----------|-----------|------------------------|----------------|
+| `AI_GUARD_KEY` | No | empty (guard disabled) | Enable Zscaler AI Guard |
+| `XAI_API_KEY` | No | empty | Use xAI as a chat provider |
+| `DEV_ENV_IP_ADDR` | No | empty | Dev bind address (see `blog-backend`) |
+| `PROD_ENV_IP_ADDR` | No | empty | Documented in backend templates; prod compose listens on all interfaces via `PORT` |
+| `CERT_KEY_PATH` / `CERT_CERT_PATH` | No | empty | Host HTTPS outside the default compose/nginx setup |
+| `CHROMA_URL` | No* | `http://chroma:8000` in compose | Custom Chroma host |
+| `OLLAMA_HOST` | No* | `http://host.docker.internal:11434` in compose | Ollama on another machine |
+
+\*Leave commented out in `backend.env` to use compose defaults. Values in `docker-compose.yml` `environment:` override `env_file` for the same key.
+
+**Not in `backend.env`:**
+
+| Setting | Where to configure |
+|---------|-------------------|
+| **Ollama listen address** (`0.0.0.0:11434` on the host) | OS guide — `configure-ollama-for-docker.sh` or `OLLAMA_HOST` on the Ollama *daemon* |
+| **Frontend API URL** (`NEXT_PUBLIC_API_URL`) | `docker-compose.yml` → `frontend` service (change if users reach the app by hostname/IP other than `http://localhost`) |
+| **Chat / embedding model names** | Hardcoded in `blog-backend` today; bootstrap pulls Ollama models listed in README |
+| **CORS allowed origins** | `blog-backend/server.ts` (change if frontend is served from another origin) |
+
+Developers working in the **`blog-backend` repo** directly use that repo’s `.env` / `.env.production.local` (see `blog-backend/.env.example`). The home-lab deploy path uses **`home-lab-app/backend.env`** only.
+
+`docker-compose.dev.yml` also loads `./backend.env` for local dev stacks.
+
+---
+
 ## Stack overview
 
 | Component | Where it runs |

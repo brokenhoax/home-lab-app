@@ -240,6 +240,14 @@ fi
 
 echo "=== Ensuring config files exist ==="
 mkdir -p infra/nginx
+if [[ ! -f backend.env ]]; then
+  if [[ -f backend.env.example ]]; then
+    cp backend.env.example backend.env
+    echo "Created backend.env from backend.env.example — edit API keys and overrides before relying on them."
+  else
+    echo "WARNING: missing backend.env and backend.env.example — create backend.env for API keys (see README)."
+  fi
+fi
 if [[ ! -f infra/nginx/nginx.conf ]]; then
   echo "ERROR: missing infra/nginx/nginx.conf — restore from the repo and re-run."
   exit 1
