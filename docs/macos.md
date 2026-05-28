@@ -1,14 +1,24 @@
-# macOS — Docker Desktop
+# macOS — Docker Desktop required
 
-Run `./bootstrap.sh` in **Terminal** (bash). Docker Desktop provides the engine; Ollama runs natively on the Mac.
+Run `./bootstrap.sh` in **Terminal** (bash). **Docker Desktop is mandatory on macOS** — there is no supported path to install Docker Engine directly on Darwin.
 
-## Requirements
+## Why Docker Desktop on Mac but not on RHEL?
 
-- macOS 12+ (Apple Silicon or Intel)
-- [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/)
-- [Ollama for Mac](https://ollama.com/download/mac)
-- bash, curl (included with macOS)
-- Ports **80**, **8000**, **9001** free
+macOS is **not Linux**. Containers need a Linux kernel; Docker Desktop runs a small Linux VM (via Apple’s hypervisor) and exposes `docker` / `docker compose` to your Mac. On RHEL, Docker Engine runs natively on the host kernel. On Windows, WSL 2 gives you a real Linux environment where Engine can run without the Desktop app; macOS has no equivalent.
+
+## Prerequisites (install before `./bootstrap.sh`)
+
+| Item | Required? | Notes |
+|------|-----------|--------|
+| macOS 12+ (Apple Silicon or Intel) | Yes | |
+| **[Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/)** | **Yes** | Install, open, wait until status is **Running** — bootstrap will fail without it |
+| **[Ollama for Mac](https://ollama.com/download/mac)** | Yes | Menu-bar app / CLI; API on `127.0.0.1:11434` |
+| bash, curl | Yes | Included with macOS |
+| Ports **80**, **8000**, **9001** | Yes | Free on localhost |
+| `configure-ollama-for-docker.sh` | Usually no | `host.docker.internal` works with Desktop |
+| Docker Hub login | No | Public images |
+
+**Checklist:** install Docker Desktop → install Ollama → start both → `./bootstrap.sh`.
 
 ## Quick start
 

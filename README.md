@@ -12,13 +12,40 @@ This project runs:
 
 ---
 
+## Prerequisites (before bootstrap)
+
+Install everything in your OS guide **before** running bootstrap. Summary:
+
+| Prerequisite | RHEL / Linux | Windows (WSL) | macOS |
+|--------------|:------------:|:-------------:|:-----:|
+| **Docker** | Installed by `./bootstrap.sh` (Docker CE) | Docker Engine in WSL — see [windows.md](docs/windows.md) | [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) — **required** |
+| **Ollama** | You install ([linux-rhel.md](docs/linux-rhel.md)) | You install in WSL (recommended) or on Windows — [windows.md](docs/windows.md) | You install ([macos.md](docs/macos.md)) |
+| **WSL 2 + Ubuntu** | — | Required | — |
+| **bash, curl, git** | Included / `yum` | In WSL distro | Included |
+| **Ports 80, 8000, 9001** | Free on host | Free (forwarded via Docker) | Free on host |
+| **sudo** (first Docker install on Linux) | Yes | For Ollama systemd config in WSL | — |
+
+### Why Docker Desktop on macOS, but not on RHEL?
+
+Docker runs **Linux containers**, which need a Linux kernel (namespaces, cgroups, etc.).
+
+| Platform | Host OS | How Docker gets a Linux kernel |
+|----------|---------|--------------------------------|
+| **RHEL / Rocky / Alma** | Linux | Native — `bootstrap.sh` installs **Docker Engine** (`dockerd` on the host). No Desktop product. |
+| **Windows + WSL** | Windows | Your **WSL 2 distro is real Linux**. Install **Docker Engine inside WSL** (like RHEL). Docker Desktop is optional, not required. |
+| **macOS** | Darwin (not Linux) | **No Linux kernel on the Mac.** Docker Desktop runs a hidden Linux VM and exposes `docker` to macOS. Alternatives (Colima, Lima) do the same class of thing; this project documents Docker Desktop. |
+
+So: **macOS is not Linux** (Docker Desktop required). **RHEL is Linux** (Docker Engine on the host). **Windows + WSL** is Linux *inside the distro* — install Docker Engine there; no Desktop product needed. macOS has no equivalent native Linux environment.
+
+---
+
 ## Choose your platform
 
 | Platform | Guide | Bootstrap |
 |----------|--------|-----------|
 | **Linux (RHEL / CentOS / Rocky / Alma)** | [docs/linux-rhel.md](docs/linux-rhel.md) | `./bootstrap.sh` |
-| **Windows 11 + WSL 2 + Docker Desktop** | [docs/windows.md](docs/windows.md) | `.\bootstrap.ps1` or `./bootstrap.sh` in WSL |
-| **macOS + Docker Desktop** | [docs/macos.md](docs/macos.md) | `./bootstrap.sh` |
+| **Windows 11 + WSL 2** | [docs/windows.md](docs/windows.md) | `.\bootstrap.ps1` or `./bootstrap.sh` in WSL |
+| **macOS** | [docs/macos.md](docs/macos.md) | `./bootstrap.sh` |
 
 After a successful bootstrap on any platform:
 
@@ -65,4 +92,4 @@ Verify: `ollama list` should include `kraus-cloud-llama`.
 | Terminal closes immediately | Run from an existing terminal; do not double-click scripts |
 | Ingestion / chat errors | Ollama reachable from containers — see your OS guide |
 | Chat **504 Gateway Timeout** | `docker compose restart nginx`; first reply can take several minutes on slow hardware |
-| `permission denied` on `docker.sock` | Linux RHEL guide (`docker` group); not applicable to Docker Desktop on Mac/Windows |
+| `permission denied` on `docker.sock` | RHEL / WSL: add user to `docker` group — see your OS guide; macOS uses Docker Desktop |

@@ -1,5 +1,5 @@
 # Bootstrap home-lab-app from Windows via WSL.
-# Requires: Windows 11, WSL 2, Docker Desktop (WSL integration enabled).
+# Requires: Windows 11, WSL 2, Docker Engine running inside WSL.
 # Usage (PowerShell):  cd C:\path\to\home-lab-app   .\bootstrap.ps1
 
 #Requires -Version 5.1
@@ -36,7 +36,7 @@ Write-Host "=== Home Lab App bootstrap (Windows → WSL) ==="
 Write-Host "WSL distro: $distro"
 Write-Host "Repo (WSL): $RepoWsl"
 Write-Host ""
-Write-Host "Prerequisites: Docker Desktop running, WSL integration enabled for '$distro'."
+Write-Host "Prerequisites: Docker Engine running in WSL ('$distro') — docker info must succeed there."
 Write-Host "See docs/windows.md if this fails."
 Write-Host ""
 

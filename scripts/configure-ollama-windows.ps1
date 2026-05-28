@@ -1,4 +1,4 @@
-# Expose Ollama on Windows so Docker Desktop containers can reach it via host.docker.internal.
+# Expose Ollama on Windows so WSL/Docker containers can reach it via host.docker.internal.
 # Run in PowerShell (Admin not required for User-level env var):
 #   powershell -ExecutionPolicy Bypass -File .\scripts\configure-ollama-windows.ps1
 

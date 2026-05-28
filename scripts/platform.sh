@@ -30,9 +30,7 @@ is_rhel_like() {
 }
 
 uses_docker_desktop() {
-  local p
-  p="$(platform_name)"
-  [[ "$p" == "linux-wsl" || "$p" == "darwin" ]]
+  [[ "$(platform_name)" == "darwin" ]]
 }
 
 docker_bridge_ip() {
@@ -43,7 +41,7 @@ docker_bridge_ip() {
   echo "172.17.0.1"
 }
 
-# True if containers can reach Ollama (bridge IP on native Linux, host.docker.internal on Desktop/WSL).
+# True if containers can reach Ollama (bridge IP on native Linux, host.docker.internal via host-gateway).
 check_ollama_for_docker() {
   local bridge_ip="${1:-$(docker_bridge_ip)}"
 

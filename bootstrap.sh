@@ -45,17 +45,19 @@ ensure_docker_access() {
     return 0
   fi
 
+  if [[ "${PLATFORM}" == "linux-wsl" ]]; then
+    echo "ERROR: Cannot reach Docker in WSL."
+    echo "  - Install/start Docker Engine in WSL:  sudo systemctl start docker"
+    echo "  - Confirm:  docker info"
+    echo "  - Run from inside WSL (not CMD alone):  ./bootstrap.sh"
+    echo "  - Guide: ${SCRIPT_DIR}/docs/windows.md"
+    exit 1
+  fi
+
   if uses_docker_desktop; then
     echo "ERROR: Cannot reach Docker."
-    if [[ "${PLATFORM}" == "linux-wsl" ]]; then
-      echo "  - Start Docker Desktop on Windows and wait until it is Running."
-      echo "  - Docker Desktop → Settings → Resources → WSL integration → enable this distro."
-      echo "  - Run this script from inside WSL (not CMD alone):  ./bootstrap.sh"
-      echo "  - Guide: ${SCRIPT_DIR}/docs/windows.md"
-    else
-      echo "  - Start Docker Desktop for Mac and wait until it is Running."
-      echo "  - Guide: ${SCRIPT_DIR}/docs/macos.md"
-    fi
+    echo "  - Start Docker Desktop for Mac and wait until it is Running."
+    echo "  - Guide: ${SCRIPT_DIR}/docs/macos.md"
     exit 1
   fi
 
@@ -77,9 +79,17 @@ ensure_docker_access() {
   fi
 
   echo "ERROR: Cannot talk to the Docker daemon."
-  echo "  - If Docker is installed, run:  sudo usermod -aG docker ${USER}"
-  echo "  - Then log out and back in (or: newgrp docker), and re-run this script."
-  echo "  - Guide: ${SCRIPT_DIR}/docs/linux-rhel.md"
+  case "${PLATFORM}" in
+    linux-wsl)
+      echo "  - Install/start Docker Engine in WSL — see ${SCRIPT_DIR}/docs/windows.md"
+      echo "  - sudo usermod -aG docker ${USER}, then wsl --shutdown and reopen Ubuntu"
+      ;;
+    *)
+      echo "  - If Docker is installed, run:  sudo usermod -aG docker ${USER}"
+      echo "  - Then log out and back in (or: newgrp docker), and re-run this script."
+      echo "  - Guide: ${SCRIPT_DIR}/docs/linux-rhel.md"
+      ;;
+  esac
   exit 1
 }
 
@@ -98,7 +108,18 @@ install_docker_if_missing() {
           echo "You may need to log out and back in for group membership to apply."
         fi
         ;;
-      linux-wsl|darwin)
+      linux-wsl)
+        if command -v systemctl &>/dev/null && ! systemctl is-active --quiet docker 2>/dev/null; then
+          echo "Starting Docker service in WSL (sudo required)..."
+          sudo systemctl enable --now docker
+        fi
+        if ! id -nG "${USER}" | grep -qw docker; then
+          echo "Adding ${USER} to the docker group (sudo required)..."
+          sudo usermod -aG docker "${USER}" || true
+          echo "Restart WSL (wsl --shutdown) or run: newgrp docker"
+        fi
+        ;;
+      darwin)
         echo "Using Docker Desktop — ensure it is running before continuing."
         ;;
       linux)
@@ -121,8 +142,7 @@ install_docker_if_missing() {
       ;;
     linux-wsl)
       echo "ERROR: Docker CLI not found inside WSL."
-      echo "  Install Docker Desktop on Windows 11 and enable WSL integration for this distro."
-      echo "  Guide: ${SCRIPT_DIR}/docs/windows.md"
+      echo "  Install Docker Engine in WSL (docker-ce) — see ${SCRIPT_DIR}/docs/windows.md"
       exit 1
       ;;
     darwin)
