@@ -1,13 +1,24 @@
-# Linux (RHEL / CentOS / Rocky / Alma)
+# Home Lab App
 
-Native Linux deployment with optional Docker CE install via `bootstrap.sh`.
+Thanks for checking out the Home Lab App!
+
+Before proceeding, please ensure you have read the main "README.md" file in this repository as there are some critical prerequisites that must be completed before Home Lab App will function correctly. Once those prerequisites are met, the following instructions will help you through deploying the Home Lab App in a few simple commands.
+
+```
+🐧This particular set of instructions is for Linux environments (RHEL, CENTOS, ROCK, Alma).
+```
+
+Let's get started!
 
 ## Requirements
 
 - RHEL 8+, CentOS Stream, Rocky, Alma, or compatible (`yum` / `dnf`)
 - `sudo` for first-time Docker install and `docker` group
 - curl, bash
-- Ports **80**, **8000**, **9001** available
+- Ports **80**, **8000**, **9001**, **11434** available
+- Enough RAM/disk for Docker images plus Ollama models (~several GB for `llama3.1:8b`)
+
+**Ollama runs in Docker** on Linux — bootstrap pulls models automatically. No separate Ollama install or host networking setup.
 
 ## Quick start
 
@@ -28,76 +39,59 @@ Uses `$USER` (not a hardcoded account). For RHEL-like hosts it will:
 3. Run `sudo usermod -aG docker "$USER"` when needed.
 4. Re-run under `sg docker` so the same terminal works without logging out.
 5. Fall back to `sudo docker compose` if group access is not ready yet.
-6. Pull Ollama models when the CLI and daemon are available.
+6. Start the **Ollama container** (`docker-compose.linux.yml`), pull models, and create `kraus-cloud-llama`.
 7. `docker compose pull`, `up -d`, and run the ingest profile.
 
-**Teammate checklist:** clone → `cd` → `./bootstrap.sh` → sudo if asked → install Ollama (below). No Docker Hub login required for public images.
+**Teammate checklist:** clone → `cd` → `./bootstrap.sh` → sudo if asked. No Docker Hub login required for public images.
 
-## Public images vs. the `docker` group
+## Ollama models
 
-| | What it controls |
-|---|------------------|
-| **Public images** (`brokenhoax/lab-app-*`) | Who can **download** images from Docker Hub |
-| **Local `docker` group** | Who on **this machine** may use `/var/run/docker.sock` |
+`bootstrap.sh` pulls these automatically into the Ollama container:
 
-Publishing images does not grant Docker permission on someone else's host.
+| Model                   | Purpose                        |
+| ----------------------- | ------------------------------ |
+| `llama3.1:8b`           | Base for `kraus-cloud-llama`   |
+| `nomic-embed-text:v1.5` | Embeddings / RAG               |
+| `llama-guard3:8b`       | Safety filter                  |
+| `kraus-cloud-llama`     | Chat (from `ollama/Modelfile`) |
 
-## Install Ollama
+After a successful bootstrap on any platform:
 
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
+- App: [http://localhost/](http://localhost/)
+- Backend: [http://localhost:8000](http://localhost:8000)
+- Chroma (host port): [http://localhost:9001](http://localhost:9001)
 
-Models are pulled automatically by `./bootstrap.sh`, or manually:
+Logs: `bootstrap.log` in the repo root.
 
-```bash
-ollama pull llama3.1:8b
-ollama pull nomic-embed-text:v1.5
-ollama pull llama-guard3:8b
-ollama create kraus-cloud-llama -f ollama/Modelfile
-```
-
-Verify:
+## Verify
 
 ```bash
-ollama list
-ollama ps
+docker compose -f docker-compose.yml -f docker-compose.linux.yml exec ollama ollama list
 ```
 
-## Expose Ollama to Docker (required for chat / ingestion)
-
-Containers call `http://host.docker.internal:11434` (mapped to the host gateway, often `172.17.0.1`). Ollama’s default bind is **127.0.0.1 only**, so chat/ingest fail until the listen address is widened.
-
-`/etc/ollama/config.yaml` does **not** set the listen address on current Ollama builds. Use systemd:
+Manual pull (if bootstrap was interrupted):
 
 ```bash
-cd ~/home-lab-app
-sudo ./scripts/configure-ollama-for-docker.sh
+docker compose -f docker-compose.yml -f docker-compose.linux.yml exec ollama ollama pull llama3.1:8b
+docker compose -f docker-compose.yml -f docker-compose.linux.yml exec ollama ollama create kraus-cloud-llama -f /ollama-config/Modelfile
 ```
-
-Or manually:
-
-```bash
-sudo mkdir -p /etc/systemd/system/ollama.service.d
-printf '%s\n' '[Service]' 'Environment="OLLAMA_HOST=0.0.0.0:11434"' | sudo tee /etc/systemd/system/ollama.service.d/environment.conf
-sudo systemctl daemon-reload
-sudo systemctl restart ollama
-```
-
-Verify:
-
-```bash
-curl -s http://127.0.0.1:11434/api/tags
-curl -s http://172.17.0.1:11434/api/tags
-```
-
-Then re-run `./bootstrap.sh` if ingestion failed earlier.
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|--------|-----|
-| `sudo: a password is required` during Docker install | Docker already installed; script skips reinstall |
-| `permission denied` on `docker.sock` | `sudo usermod -aG docker $USER`, log out/in or `newgrp docker` |
-| Ingestion / chat errors | Ollama exposed to Docker (above); `kraus-cloud-llama` in `ollama list` |
-| Chat **504 Gateway Timeout** | `docker compose restart nginx` |
+| Symptom                                              | Fix                                                                                                                          |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `sudo: a password is required` during Docker install | Docker already installed; script skips reinstall                                                                             |
+| `permission denied` on `docker.sock`                 | `sudo usermod -aG docker $USER`, log out/in or `newgrp docker`                                                               |
+| Ingestion / chat errors                              | `docker compose -f docker-compose.yml -f docker-compose.linux.yml logs ollama`; confirm `kraus-cloud-llama` in `ollama list` |
+| Ollama container won't start                         | Check RAM; older CPUs may struggle with the `ollama/ollama` image — see README for host-Ollama fallback                      |
+| Chat **504 Gateway Timeout**                         | `docker compose restart nginx`                                                                                               |
+
+## Optional: host Ollama instead of container
+
+If the Ollama container fails on your hardware, you can run Ollama on the host and use the base `docker-compose.yml` only (macOS-style):
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+sudo ./scripts/configure-ollama-for-docker.sh
+# Run compose without docker-compose.linux.yml and pull models with host ollama CLI
+```

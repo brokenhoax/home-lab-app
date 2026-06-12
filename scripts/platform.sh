@@ -3,19 +3,22 @@
 # shellcheck shell=bash
 
 platform_name() {
+  local p
   case "$(uname -s)" in
     Linux)
       if is_wsl; then
-        echo "linux-wsl"
+        p="linux-wsl"
       elif is_rhel_like; then
-        echo "linux-rhel"
+        p="linux-rhel"
       else
-        echo "linux"
+        p="linux"
       fi
       ;;
-    Darwin) echo "darwin" ;;
-    *) echo "unknown" ;;
+    Darwin) p="darwin" ;;
+    *) p="unknown" ;;
   esac
+  # Strip CR from Windows checkouts (avoids linux-wsl^M breaking case matches).
+  echo "${p//$'\r'/}"
 }
 
 is_wsl() {
@@ -31,6 +34,17 @@ is_rhel_like() {
 
 uses_docker_desktop() {
   [[ "$(platform_name)" == "darwin" ]]
+}
+
+# Container Ollama on Linux (WSL/RHEL/native); host Ollama on macOS for Apple GPU performance.
+# Optional arg: precomputed platform (bootstrap passes sanitized PLATFORM).
+uses_container_ollama() {
+  local p="${1:-$(platform_name)}"
+  p="${p//$'\r'/}"
+  case "$p" in
+    linux-wsl|linux-rhel|linux) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 docker_bridge_ip() {
@@ -62,14 +76,10 @@ ollama_fix_hint() {
   local p
   p="$(platform_name)"
   case "$p" in
-    linux-rhel|linux)
-      echo "  Fix (Linux):  sudo ${SCRIPT_DIR:-.}/scripts/configure-ollama-for-docker.sh"
-      echo "  Or:   sudo systemctl edit ollama.service  →  Environment=\"OLLAMA_HOST=0.0.0.0:11434\""
-      ;;
-    linux-wsl)
-      echo "  Fix (Ollama in WSL):  sudo ${SCRIPT_DIR:-.}/scripts/configure-ollama-for-docker.sh"
-      echo "  Fix (Ollama on Windows):  powershell -File ${SCRIPT_DIR:-.}/scripts/configure-ollama-windows.ps1"
-      echo "  See:  docs/windows.md"
+    linux-rhel|linux|linux-wsl)
+      echo "  Bootstrap runs Ollama in Docker on Linux — check:  docker compose -f docker-compose.yml -f docker-compose.linux.yml ps ollama"
+      echo "  Logs:  docker compose -f docker-compose.yml -f docker-compose.linux.yml logs ollama"
+      echo "  For host Ollama instead, skip docker-compose.linux.yml and use configure-ollama-for-docker.sh"
       ;;
     darwin)
       echo "  On macOS, host.docker.internal usually works if Ollama is running."

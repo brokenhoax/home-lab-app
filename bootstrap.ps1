@@ -37,6 +37,7 @@ Write-Host "WSL distro: $distro"
 Write-Host "Repo (WSL): $RepoWsl"
 Write-Host ""
 Write-Host "Prerequisites: Docker Engine running in WSL ('$distro') — docker info must succeed there."
+Write-Host "Ollama runs in Docker on WSL — no separate Ollama install required."
 Write-Host "See docs/windows.md if this fails."
 Write-Host ""
 

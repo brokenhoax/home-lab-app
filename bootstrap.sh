@@ -12,7 +12,16 @@ cd "$SCRIPT_DIR"
 source "${SCRIPT_DIR}/scripts/platform.sh"
 
 PLATFORM="$(platform_name)"
+PLATFORM="${PLATFORM//$'\r'/}"
+CONTAINER_OLLAMA=false
+if uses_container_ollama "${PLATFORM}"; then
+  CONTAINER_OLLAMA=true
+fi
 LOG_FILE="${SCRIPT_DIR}/bootstrap.log"
+COMPOSE_FILE_ARGS=(-f "${SCRIPT_DIR}/docker-compose.yml")
+if [[ "${CONTAINER_OLLAMA}" == true ]]; then
+  COMPOSE_FILE_ARGS+=(-f "${SCRIPT_DIR}/docker-compose.linux.yml")
+fi
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 on_error() {
@@ -30,6 +39,11 @@ trap 'on_error ${LINENO}' ERR
 echo "=== Home Lab App bootstrap ==="
 echo "Started: $(date)"
 echo "Platform: ${PLATFORM}"
+if [[ "${CONTAINER_OLLAMA}" == true ]]; then
+  echo "Ollama: Docker container (docker-compose.linux.yml)"
+else
+  echo "Ollama: host (native app — required on macOS for Apple GPU)"
+fi
 echo "Working directory: ${SCRIPT_DIR}"
 
 docker_ok() {
@@ -37,7 +51,7 @@ docker_ok() {
 }
 
 compose() {
-  docker compose "$@"
+  docker compose "${COMPOSE_FILE_ARGS[@]}" "$@"
 }
 
 ensure_docker_access() {
@@ -68,13 +82,13 @@ ensure_docker_access() {
 
   if sudo -n docker info &>/dev/null 2>&1; then
     echo "Using sudo for Docker commands."
-    compose() { sudo docker compose "$@"; }
+    compose() { sudo docker compose "${COMPOSE_FILE_ARGS[@]}" "$@"; }
     return 0
   fi
 
   if command -v docker &>/dev/null && sudo docker info &>/dev/null; then
     echo "Using sudo for Docker commands."
-    compose() { sudo docker compose "$@"; }
+    compose() { sudo docker compose "${COMPOSE_FILE_ARGS[@]}" "$@"; }
     return 0
   fi
 
@@ -93,39 +107,45 @@ ensure_docker_access() {
   exit 1
 }
 
+ensure_linux_docker_service() {
+  if command -v systemctl &>/dev/null && ! systemctl is-active --quiet docker 2>/dev/null; then
+    echo "Starting Docker service (sudo required)..."
+    sudo systemctl enable --now docker
+  fi
+  if ! id -nG "${USER}" | grep -qw docker; then
+    echo "Adding ${USER} to the docker group (sudo required)..."
+    sudo usermod -aG docker "${USER}" || true
+    if [[ "${PLATFORM}" == "linux-wsl" ]]; then
+      echo "Restart WSL (wsl --shutdown) or run: newgrp docker"
+    else
+      echo "You may need to log out and back in for group membership to apply."
+    fi
+  fi
+}
+
+docker_runtime_hint() {
+  case "${PLATFORM}" in
+    linux-wsl)
+      echo "Using Docker in WSL — Docker Desktop is not required if docker info works here."
+      ;;
+    linux-rhel|linux)
+      echo "Using Docker Engine on Linux — ensure the daemon is running (docker info)."
+      ;;
+    darwin)
+      echo "Using Docker Desktop — ensure it is running before continuing."
+      ;;
+  esac
+}
+
 install_docker_if_missing() {
   if command -v docker &>/dev/null; then
     echo "=== Docker already installed ($(docker --version 2>/dev/null || echo unknown)) ==="
     case "${PLATFORM}" in
-      linux-rhel)
-        if command -v systemctl &>/dev/null && ! systemctl is-active --quiet docker 2>/dev/null; then
-          echo "Starting Docker service (sudo required)..."
-          sudo systemctl enable --now docker
-        fi
-        if ! id -nG "${USER}" | grep -qw docker; then
-          echo "Adding ${USER} to the docker group (sudo required)..."
-          sudo usermod -aG docker "${USER}" || true
-          echo "You may need to log out and back in for group membership to apply."
-        fi
-        ;;
-      linux-wsl)
-        if command -v systemctl &>/dev/null && ! systemctl is-active --quiet docker 2>/dev/null; then
-          echo "Starting Docker service in WSL (sudo required)..."
-          sudo systemctl enable --now docker
-        fi
-        if ! id -nG "${USER}" | grep -qw docker; then
-          echo "Adding ${USER} to the docker group (sudo required)..."
-          sudo usermod -aG docker "${USER}" || true
-          echo "Restart WSL (wsl --shutdown) or run: newgrp docker"
-        fi
-        ;;
-      darwin)
-        echo "Using Docker Desktop — ensure it is running before continuing."
-        ;;
-      linux)
-        echo "Ensure the Docker daemon is running on this host."
+      linux-rhel|linux-wsl|linux)
+        ensure_linux_docker_service
         ;;
     esac
+    docker_runtime_hint
     return 0
   fi
 
@@ -157,22 +177,24 @@ install_docker_if_missing() {
   esac
 }
 
-ollama_has_model() {
+ollama_has_model_host() {
   local name="$1"
   command -v ollama &>/dev/null || return 1
   ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -q "^${name}"
 }
 
-ensure_ollama_models() {
+ollama_has_model_container() {
+  local name="$1"
+  compose exec -T ollama ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -q "^${name}"
+}
+
+ensure_ollama_models_host() {
   local modelfile="${SCRIPT_DIR}/ollama/Modelfile"
   local -a base_models=( "llama3.1:8b" "nomic-embed-text:v1.5" "llama-guard3:8b" )
 
   if ! command -v ollama &>/dev/null; then
     echo "WARNING: ollama CLI not found; skipping model pull/create."
-    if [[ "${PLATFORM}" == "linux-wsl" ]]; then
-      echo "  Install Ollama inside WSL:  curl -fsSL https://ollama.com/install.sh | sh"
-      echo "  Or see docs/windows.md if Ollama runs on Windows instead."
-    fi
+    echo "  Install Ollama: https://ollama.com/download/mac (see docs/macos.md)"
     return 0
   fi
   if ! curl -sf --max-time 3 http://127.0.0.1:11434/api/tags &>/dev/null; then
@@ -183,9 +205,9 @@ ensure_ollama_models() {
     return 0
   fi
 
-  echo "=== Ensuring Ollama models (chat uses kraus-cloud-llama) ==="
+  echo "=== Ensuring Ollama models on host (chat uses kraus-cloud-llama) ==="
   for model in "${base_models[@]}"; do
-    if ollama_has_model "${model}"; then
+    if ollama_has_model_host "${model}"; then
       echo "  ${model} — present"
     else
       echo "  Pulling ${model}..."
@@ -193,7 +215,7 @@ ensure_ollama_models() {
     fi
   done
 
-  if ollama_has_model "kraus-cloud-llama"; then
+  if ollama_has_model_host "kraus-cloud-llama"; then
     echo "  kraus-cloud-llama — present"
   else
     echo "  Creating kraus-cloud-llama from ollama/Modelfile..."
@@ -202,41 +224,114 @@ ensure_ollama_models() {
   fi
 }
 
-install_docker_if_missing
-ensure_docker_access
-
-echo "=== Checking Ollama on host (required for embeddings / chat) ==="
-if ! curl -sf --max-time 3 http://127.0.0.1:11434/api/tags &>/dev/null; then
-  echo "WARNING: Ollama is not reachable at http://127.0.0.1:11434"
-  case "${PLATFORM}" in
-    linux-wsl)
-      echo "  Install in WSL (recommended):  curl -fsSL https://ollama.com/install.sh | sh"
-      echo "  Or install Ollama for Windows — see docs/windows.md"
-      ;;
-    darwin)
-      echo "  Install: https://ollama.com/download/mac"
-      ;;
-    *)
-      echo "  Install: curl -fsSL https://ollama.com/install.sh | sh"
-      ;;
-  esac
-  echo "  Models:  ollama pull llama3.1:8b && ollama pull nomic-embed-text:v1.5"
-else
-  echo "Ollama is reachable at http://127.0.0.1:11434"
-  BRIDGE_IP="$(docker_bridge_ip)"
-  if check_ollama_for_docker "${BRIDGE_IP}"; then
-    if uses_docker_desktop; then
-      echo "Ollama is reachable from Docker (host.docker.internal)"
-    else
-      echo "Ollama is reachable from Docker at http://${BRIDGE_IP}:11434"
+wait_for_ollama_container() {
+  echo "=== Waiting for Ollama container ==="
+  for i in {1..60}; do
+    if compose ps ollama 2>/dev/null | grep -q '(healthy)'; then
+      echo "Ollama container is healthy."
+      return 0
     fi
+    if compose exec -T ollama ollama list &>/dev/null 2>&1; then
+      echo "Ollama container is up."
+      return 0
+    fi
+    if [[ "$i" -eq 60 ]]; then
+      echo "ERROR: Ollama container did not become ready."
+      echo "  Check:  docker compose -f docker-compose.yml -f docker-compose.linux.yml logs ollama"
+      exit 1
+    fi
+    sleep 2
+  done
+}
+
+ensure_ollama_models_container() {
+  local modelfile="${SCRIPT_DIR}/ollama/Modelfile"
+  local -a base_models=( "llama3.1:8b" "nomic-embed-text:v1.5" "llama-guard3:8b" )
+
+  if [[ ! -f "${modelfile}" ]]; then
+    echo "WARNING: missing ${modelfile}; cannot create kraus-cloud-llama."
+    return 0
+  fi
+
+  echo "=== Ensuring Ollama models in container (chat uses kraus-cloud-llama) ==="
+  for model in "${base_models[@]}"; do
+    if ollama_has_model_container "${model}"; then
+      echo "  ${model} — present"
+    else
+      echo "  Pulling ${model} (this may take several minutes)..."
+      compose exec -T ollama ollama pull "${model}"
+    fi
+  done
+
+  if ollama_has_model_container "kraus-cloud-llama"; then
+    echo "  kraus-cloud-llama — present"
+  else
+    echo "  Creating kraus-cloud-llama from ollama/Modelfile..."
+    compose exec -T ollama ollama create kraus-cloud-llama -f /ollama-config/Modelfile
+    echo "  kraus-cloud-llama — created"
+  fi
+}
+
+check_host_ollama() {
+  echo "=== Checking Ollama on host (required for embeddings / chat) ==="
+  if ! curl -sf --max-time 3 http://127.0.0.1:11434/api/tags &>/dev/null; then
+    echo "WARNING: Ollama is not reachable at http://127.0.0.1:11434"
+    echo "  Install: https://ollama.com/download/mac — see docs/macos.md"
+    echo "  Models:  ollama pull llama3.1:8b && ollama pull nomic-embed-text:v1.5"
+    return 0
+  fi
+
+  echo "Ollama is reachable at http://127.0.0.1:11434"
+  local bridge_ip
+  bridge_ip="$(docker_bridge_ip)"
+  if check_ollama_for_docker "${bridge_ip}"; then
+    echo "Ollama is reachable from Docker (host.docker.internal)"
   else
     echo "WARNING: Ollama is NOT reachable from Docker containers."
     echo "  (Backend uses http://host.docker.internal:11434)"
     ollama_fix_hint
   fi
-  ensure_ollama_models
-fi
+  ensure_ollama_models_host
+}
+
+free_host_ollama_port() {
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'lab-app-ollama'; then
+    return 0
+  fi
+  if ! curl -sf --max-time 2 http://127.0.0.1:11434/api/tags &>/dev/null; then
+    return 0
+  fi
+
+  echo "Port 11434 is in use by host Ollama (likely from an older bootstrap or manual install)."
+  echo "Stopping host Ollama so the Docker container can bind :11434..."
+  if command -v systemctl &>/dev/null; then
+    sudo systemctl stop ollama 2>/dev/null || true
+    sudo systemctl disable ollama 2>/dev/null || true
+  fi
+  sudo pkill -x ollama 2>/dev/null || true
+  sleep 2
+
+  if curl -sf --max-time 2 http://127.0.0.1:11434/api/tags &>/dev/null \
+    && ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'lab-app-ollama'; then
+    echo "ERROR: Port 11434 is still in use. Stop host Ollama manually, then re-run bootstrap:"
+    echo "  sudo systemctl stop ollama 2>/dev/null; sudo pkill ollama"
+    exit 1
+  fi
+}
+
+prepare_container_ollama() {
+  echo "=== Ollama: Docker container (Linux) ==="
+  free_host_ollama_port
+  echo "Pulling Ollama image..."
+  compose pull ollama
+  echo "Starting Ollama container..."
+  compose up -d ollama
+  wait_for_ollama_container
+  ensure_ollama_models_container
+}
+
+install_docker_if_missing
+ensure_docker_access
 
 echo "=== Ensuring config files exist ==="
 mkdir -p infra/nginx
@@ -256,8 +351,18 @@ if [[ ! -f docker-compose.yml ]]; then
   echo "ERROR: missing docker-compose.yml — restore from the repo and re-run."
   exit 1
 fi
+if [[ "${CONTAINER_OLLAMA}" == true ]] && [[ ! -f docker-compose.linux.yml ]]; then
+  echo "ERROR: missing docker-compose.linux.yml — restore from the repo and re-run."
+  exit 1
+fi
 if [[ ! -f data/dmvData.json ]]; then
   echo "WARNING: missing data/dmvData.json — ingestion may fail."
+fi
+
+if [[ "${CONTAINER_OLLAMA}" == true ]]; then
+  prepare_container_ollama
+else
+  check_host_ollama
 fi
 
 echo "=== Pulling images ==="
@@ -266,14 +371,16 @@ compose pull
 echo "=== Starting stack ==="
 compose up -d
 
-BRIDGE_IP="$(docker_bridge_ip)"
-if curl -sf --max-time 3 http://127.0.0.1:11434/api/tags &>/dev/null \
-  && ! check_ollama_for_docker "${BRIDGE_IP}"; then
-  echo ""
-  echo "ERROR: Ollama is up on localhost but not reachable from Docker."
-  echo "  Chat and ingestion will fail until Ollama is exposed to containers."
-  ollama_fix_hint
-  echo ""
+if [[ "${CONTAINER_OLLAMA}" != true ]]; then
+  BRIDGE_IP="$(docker_bridge_ip)"
+  if curl -sf --max-time 3 http://127.0.0.1:11434/api/tags &>/dev/null \
+    && ! check_ollama_for_docker "${BRIDGE_IP}"; then
+    echo ""
+    echo "ERROR: Ollama is up on localhost but not reachable from Docker."
+    echo "  Chat and ingestion will fail until Ollama is exposed to containers."
+    ollama_fix_hint
+    echo ""
+  fi
 fi
 
 echo "=== Waiting for Chroma ==="

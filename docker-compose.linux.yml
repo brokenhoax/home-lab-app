@@ -1,0 +1,43 @@
+# Linux override (WSL, RHEL, native Linux): run Ollama in Docker.
+# Applied automatically by bootstrap.sh — not used on macOS (host Ollama for Apple GPU).
+# Usage: docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d
+
+services:
+  backend:
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    depends_on:
+      chroma:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+
+  ingest:
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    depends_on:
+      chroma:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: lab-app-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+      - ./ollama:/ollama-config:ro
+    networks:
+      - lab-app-net
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  ollama-data:

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Make Ollama reachable from Docker containers on Linux (RHEL, WSL with Ollama in WSL, etc.).
+# Optional: expose host Ollama to Docker containers (macOS-style setup on Linux).
+# Bootstrap uses container Ollama on Linux/WSL by default (docker-compose.linux.yml).
+# Use this script only if you run Ollama on the host instead of in Docker.
 # Ollama ignores /etc/ollama/config.yaml for the listen address; use OLLAMA_HOST via systemd.
 set -euo pipefail
 
