@@ -47,7 +47,7 @@ Clone the repo **inside the WSL filesystem** (fast, reliable file watching):
 ```bash
 # In Ubuntu (WSL) — not PowerShell
 cd ~
-git clone <repo-url> home-lab-app
+git clone https://github.com/brokenhoax/home-lab-app.git home-lab-app
 cd home-lab-app
 ```
 

@@ -23,7 +23,7 @@ Let's get started!
 ## Quick start
 
 ```bash
-git clone <repo-url> ~/home-lab-app
+git clone https://github.com/brokenhoax/home-lab-app.git ~/home-lab-app
 cd ~/home-lab-app
 ./bootstrap.sh
 ```
@@ -48,12 +48,14 @@ Uses `$USER` (not a hardcoded account). For RHEL-like hosts it will:
 
 `bootstrap.sh` pulls these automatically into the Ollama container:
 
+
 | Model                   | Purpose                        |
 | ----------------------- | ------------------------------ |
 | `llama3.1:8b`           | Base for `kraus-cloud-llama`   |
 | `nomic-embed-text:v1.5` | Embeddings / RAG               |
 | `llama-guard3:8b`       | Safety filter                  |
 | `kraus-cloud-llama`     | Chat (from `ollama/Modelfile`) |
+
 
 After a successful bootstrap on any platform:
 
@@ -78,6 +80,7 @@ docker compose -f docker-compose.yml -f docker-compose.linux.yml exec ollama oll
 
 ## Troubleshooting
 
+
 | Symptom                                              | Fix                                                                                                                          |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `sudo: a password is required` during Docker install | Docker already installed; script skips reinstall                                                                             |
@@ -85,6 +88,7 @@ docker compose -f docker-compose.yml -f docker-compose.linux.yml exec ollama oll
 | Ingestion / chat errors                              | `docker compose -f docker-compose.yml -f docker-compose.linux.yml logs ollama`; confirm `kraus-cloud-llama` in `ollama list` |
 | Ollama container won't start                         | Check RAM; older CPUs may struggle with the `ollama/ollama` image — see README for host-Ollama fallback                      |
 | Chat **504 Gateway Timeout**                         | `docker compose restart nginx`                                                                                               |
+
 
 ## Optional: host Ollama instead of container
 
@@ -95,3 +99,4 @@ curl -fsSL https://ollama.com/install.sh | sh
 sudo ./scripts/configure-ollama-for-docker.sh
 # Run compose without docker-compose.linux.yml and pull models with host ollama CLI
 ```
+

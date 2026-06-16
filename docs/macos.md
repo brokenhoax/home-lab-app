@@ -10,40 +10,83 @@ Let's get started!
 🍎 This particular set of instructions is for macOS environments.
 ```
 
-## macOS — Docker Desktop required
+## Prerequisites
 
-Run `./bootstrap.sh` in **Terminal** (bash). **Docker Desktop is mandatory on macOS** — there is no supported path to install Docker Engine directly on Darwin.
+| Item                                                                          | Required? | Notes                                                                                         |
+| ----------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------- |
+| macOS 12+ (Apple Silicon or Intel)                                            | Yes       |                                                                                               |
+| **[Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/)** | **Yes**   | Install, open, wait until status is **Running** — bootstrap will fail without it              |
+| **[Ollama for Mac](https://ollama.com/download/mac)**                         | **Yes**   | **Host only** — not in Docker (Apple GPU unavailable in containers); API on `127.0.0.1:11434` |
+| Ports **80**, **8000**, **9001**                                              | Yes       | Free on localhost                                                                             |
 
-### Why Docker Desktop on Mac but not on RHEL?
+---
 
-macOS is **not Linux**. Containers need a Linux kernel; Docker Desktop runs a small Linux VM (via Apple’s hypervisor) and exposes `docker` / `docker compose` to your Mac. On RHEL, Docker Engine runs natively on the host kernel. On Windows, WSL 2 gives you a real Linux environment where Engine can run without the Desktop app; macOS has no equivalent.
+## Step 1 — Install Docker Desktop for macOS
 
-## Prerequisites (install before `./bootstrap.sh`)
+macOS is **not Linux**. Containers need a Linux kernel. Docker Desktop runs a small Linux VM (via Apple’s hypervisor) and exposes `docker` / `docker compose` to your Mac. On RHEL, Docker Engine runs natively on the host kernel. On Windows, WSL 2 gives you a real Linux environment where Engine can run without the Desktop app. macOS has no equivalent.
 
-| Item                                                                          | Required?  | Notes                                                                                         |
-| ----------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------- |
-| macOS 12+ (Apple Silicon or Intel)                                            | Yes        |                                                                                               |
-| **[Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/)** | **Yes**    | Install, open, wait until status is **Running** — bootstrap will fail without it              |
-| **[Ollama for Mac](https://ollama.com/download/mac)**                         | **Yes**    | **Host only** — not in Docker (Apple GPU unavailable in containers); API on `127.0.0.1:11434` |
-| bash, curl                                                                    | Yes        | Included with macOS                                                                           |
-| Ports **80**, **8000**, **9001**                                              | Yes        | Free on localhost                                                                             |
-| `configure-ollama-for-docker.sh`                                              | Usually no | `host.docker.internal` works with Desktop                                                     |
-| Docker Hub login                                                              | No         | Public images                                                                                 |
+Therefore, you'll need to install Docker Desktop for macOS before installing the Home Lab App:
 
-**Checklist:** install Docker Desktop → install **native** Ollama (not the Docker image) → start both → `./bootstrap.sh`.
+[https://docs.docker.com/desktop/setup/install/mac-install/](https://docs.docker.com/desktop/setup/install/mac-install/)
 
-On macOS, Ollama stays on the **host** so Apple Silicon can use the GPU. Linux/WSL use a container instead — see [windows.md](windows.md) and [linux-rhel.md](linux-rhel.md).
+Once installed, start Docker Desktop until it reports **Running**.
 
-## Quick start
+## Step 2 — Install Ollama
+
+On macOS, Ollama stays on the **host** so Apple Silicon can use the GPU.
+
+Linux/WSL use a container instead — see [windows.md](windows.md) and [linux-rhel.md](linux-rhel.md).
+
+So, you'll need to download Ollama from [https://ollama.com/download/mac](https://ollama.com/download/mac) or:
 
 ```bash
-git clone <repo-url> ~/home-lab-app
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Next, open the Ollama app (menu bar) so the API is listening on `127.0.0.1:11434`.
+
+`bootstrap.sh` pulls models and creates `kraus-cloud-llama` when the CLI is available. You shouldn't have to execute these steps manually, but if you're curious then here's the manual equivalent:
+
+```bash
+ollama pull llama3.1:8b
+ollama pull nomic-embed-text:v1.5
+ollama pull llama-guard3:8b
+ollama create kraus-cloud-llama -f ollama/Modelfile
+```
+
+To list all Ollama models donwloaded, you can run the following command:
+
+```bash
+ollama list
+```
+
+## Step 3 — Run Ollama and Docker Desktop
+
+Once installed, ensure both Ollama and Docker Desktop are running.
+
+As a reminder, we need Ollama to run outside of Docker so that it can leverage your Mac's GPU. As for Docker Desktop, Docker requires a **Linux kernel** (specifically features like namespaces and cgroups) to function. Because macOS runs on its own Darwin kernel, it cannot run Linux containers natively.
+
+Both Docker Desktop and Ollama should be visibile in your system tray (i.e., menu bar on Mac) if they are running, but if you're not sure or you prefer using the command line then you can use the following command to verify that Ollama is running:
+
+```
+curl http://localhost:11434/api/tags
+```
+
+And you can use the following command to verify that Docker Desktop is running:
+
+```
+docker info
+```
+
+## Step 4 — Bootstrap the Home Lab App
+
+```bash
+cd ~/Documents/dev
+git clone https://github.com/brokenhoax/home-lab-app.git ~/home-lab-app
 cd ~/home-lab-app
 chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
-
-Install Docker Desktop and Ollama **before** bootstrap if possible. Start Docker Desktop until it reports **Running**.
 
 After a successful bootstrap on any platform:
 
@@ -53,34 +96,11 @@ After a successful bootstrap on any platform:
 
 Logs: `bootstrap.log` in the repo root.
 
-## Install Ollama
+---
 
-Download from [https://ollama.com/download/mac](https://ollama.com/download/mac) or:
+## Miscellaneous
 
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-Open the Ollama app (menu bar) so the API is listening on `127.0.0.1:11434`.
-
-`bootstrap.sh` pulls models and creates `kraus-cloud-llama` when the CLI is available.
-
-Manual equivalent:
-
-```bash
-ollama pull llama3.1:8b
-ollama pull nomic-embed-text:v1.5
-ollama pull llama-guard3:8b
-ollama create kraus-cloud-llama -f ollama/Modelfile
-```
-
-### Verify
-
-```bash
-ollama list
-```
-
-## Ollama and Docker networking
+### Ollama and Docker Networking
 
 The backend uses `http://host.docker.internal:11434` (`extra_hosts: host-gateway` in `docker-compose.yml`). On macOS, Docker Desktop usually resolves this to the host without extra configuration.
 
@@ -94,14 +114,7 @@ If chat or ingestion still fail:
 
 You typically **do not** need the Linux `configure-ollama-for-docker.sh` script on macOS.
 
-## What `bootstrap.sh` does on macOS
-
-- Does **not** install Docker via `yum` or manage a `docker` group.
-- Expects `docker` / `docker compose` from Docker Desktop.
-- Skips RHEL-specific `systemctl` / `usermod` paths.
-- Uses Docker Desktop–aware Ollama connectivity checks.
-
-## Troubleshooting
+### Troubleshooting
 
 | Symptom                             | Fix                                                                                  |
 | ----------------------------------- | ------------------------------------------------------------------------------------ |
